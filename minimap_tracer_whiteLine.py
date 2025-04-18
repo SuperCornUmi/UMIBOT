@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 class MinimapDetector:
     def __init__(self, cam_index=0, width=1920, height=1080):
@@ -13,10 +14,14 @@ class MinimapDetector:
         self.search_x1 = 0
         self.search_y1 = 0
         self.search_width = 280
-        self.search_height = 220
+        self.search_height = 225
 
         # Store detected minimap bounding box (x, y, w, h)
         self.detected_box = None
+
+        # Black screen detection     #MapleStory's black ~= 80
+        self.black_screen_threshold = 85  # Mean brightness below this = black
+        self.was_black = False  # Whether the previous frame was black
 
     def detect_minimap_box(self, search_region):
         # Convert to grayscale and detect edges
@@ -32,10 +37,28 @@ class MinimapDetector:
                 return (x + self.search_x1, y + self.search_y1, w, h)
         return None
 
+    def is_black_screen(self, frame):
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean_brightness = np.mean(gray)
+       #print(f"[DEBUG] Mean brightness: {mean_brightness:.2f}")  # debug
+        return mean_brightness < self.black_screen_threshold
+
     def process_frame(self):
         ret, frame = self.cap.read()
         if not ret:
             return False
+
+        # Check for black screen
+        if self.is_black_screen(frame):
+            if not self.was_black:
+                print("[INFO] Black screen detected. Resetting minimap detection...")
+            print("[INFO] Black screen detected. Exiting program...")
+            return False
+        else:
+            # Screen is normal
+            if self.was_black:
+                print("[INFO] Screen recovered. Resuming minimap detection.")
+            self.was_black = False
 
         # Detect minimap only once and save its position
         if self.detected_box is None:
@@ -57,6 +80,8 @@ class MinimapDetector:
         return True
 
     def run(self):
+        print("[INFO] Waiting 5 seconds before starting detection...")
+        time.sleep(5)
         while True:
             if not self.process_frame():
                 break
